@@ -36,7 +36,9 @@ create table public.bus_position(
  the_geom geometry(point, 4326)
  );
 
-create index idx_bus_position on bus_position(scheduled_trip_id)
+create index idx_bus_position__trip on bus_position(scheduled_trip_id)
+;
+create index idx_bus_position__datetime on bus_position(datetime)
 ;
 
 CREATE INDEX gix_bus_position ON bus_position USING GIST (the_geom);
