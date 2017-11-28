@@ -120,3 +120,69 @@ http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 17018
 Starting new HTTP connection (1): api.wmata.com
 http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16945
 2017-11-28 12:27:46.127517 - 228 updated records, 228 stale records.
+Database connection made
+Current db size is 2.28 GB
+running for 60 minutes (end time = 2017-11-28 13:31:38.032950)
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16649
+450 updated records, 0 stale records.
+duplicate records found!
+Database connection made
+Current db size is 2.28 GB
+running for 60 minutes (end time = 2017-11-28 13:33:26.774024)
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16774
+454 updated records, 0 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16685
+170 updated records, 282 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16642
+294 updated records, 158 stale records.
+duplicate records found!
+Database connection made
+Current db size is 2.28 GB
+running for 60 minutes (end time = 2017-11-28 13:38:14.996164)
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16816
+453 updated records, 0 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16802
+76 updated records, 377 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16820
+385 updated records, 68 stale records.
+duplicate records found!
+Database connection made
+Current db size is 2.28 GB
+running for 60 minutes (end time = 2017-11-28 13:40:35.718202)
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16662
+450 updated records, 0 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16652
+450 updated records, 367 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16671
+450 updated records, 343 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16674
+450 updated records, 374 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16636
+450 updated records, 356 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16634
+450 updated records, 380 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16650
+450 updated records, 372 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16667
+450 updated records, 363 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16681
+450 updated records, 350 stale records.
+Starting new HTTP connection (1): api.wmata.com
+http://api.wmata.com:80 "GET /Bus.svc/json/jBusPositions HTTP/1.1" 200 16687
+449 updated records, 358 stale records.

@@ -127,14 +127,14 @@ logging.info("running for {} minutes (end time = {})".format(run_minutes, finish
 while dt.now() < finish_time and n < 50000:
     
     df1 = call_api()
-
+    print("n = {}".format(n))
     
     stale = df1[df1.index.isin(df.index)]
     # only add to the db if the position has been updated (trip id + timestamp is different)
-    df1 = df1[~df1.index.isin(df.index)]
+    new = df1[~df1.index.isin(df.index)] # this now **only has the new values**
 
     nclean = len(df1)
-    
+    df = df1
 
     #df = df.rename(columns={})
 
@@ -143,9 +143,10 @@ while dt.now() < finish_time and n < 50000:
     cur.execute('truncate table etl.bus_position')
     pg.commit()
     
-    df1.reset_index().\
-            drop_duplicates(subset=['scheduled_trip_id', 'datetime']).\
-            to_sql('bus_position', dbconn, if_exists='append', schema='etl', index=False)
+    new.reset_index().drop_duplicates(
+            subset=['scheduled_trip_id', 'datetime']).to_sql(
+                    'bus_position', dbconn, if_exists='append', 
+              schema='etl', index=False)
     
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
     pg.commit()
@@ -161,7 +162,7 @@ while dt.now() < finish_time and n < 50000:
         df1.to_csv("dupes_df1.csv")
         raise Exception("duplicates found")
 
-    df = df1
+    #df = df1
     sleep(10)
     n += 1
     # today = dt.now().date()
