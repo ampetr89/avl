@@ -81,6 +81,7 @@ def call_api():
                 'tripheadsign': 'trip_headsign',
                 'vehicleid': 'vehicle_id'
             })
+        df['datetime'] = pd.to_datetime(df['datetime'])
         df.set_index(['scheduled_trip_id', 'datetime'], inplace=True) # should be unique by this row
         return df 
     except Exception as e:
