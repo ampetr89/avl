@@ -20,7 +20,7 @@ else:
 wd = os.getcwd()
 logfile = os.path.join(wd, 'api.log')
 
-logging.basicConfig(format="%(message)s", filename=logfile, 
+logging.basicConfig(format="%(asctime)s - %(message)s", filename=logfile, 
     level=logging.DEBUG)
 
 
@@ -97,6 +97,15 @@ def db_size():
        """, dbconn)
     return round(float(sz['total_bytes'][0])/(10**9), 2)
 
+
+def check_for_dupes():
+    dupes = pd.read_sql("""
+        select scheduled_trip_id, datetime, count(*)
+        from bus_position
+        group by 1,2
+        having count(*) > 1
+        """, dbconn)
+    return dupes
 #%%
 n = 0 # TODO: initialize n from db
 start_day = dt.now().date()
@@ -125,20 +134,18 @@ while dt.now() < finish_time and n < 50000:
     df1 = df1[~df1.index.isin(df.index)]
 
     nclean = len(df1)
-    df = df1
-
-    #df = df.rename(columns={})
     
 
-    logging.info('{} - {} updated records, {} stale records.'.format(dt.now(), nclean, len(stale) ))
+    #df = df.rename(columns={})
+
+    logging.info('{} updated records, {} stale records.'.format(nclean, len(stale) ))
 
     cur.execute('truncate table etl.bus_position')
     pg.commit()
     
-    df.reset_index().drop_duplicates(
-            subset=['scheduled_trip_id', 'datetime']).to_sql(
-                    'bus_position', dbconn, if_exists='append', 
-              schema='etl', index=False)
+    df1.reset_index().\
+            drop_duplicates(subset=['scheduled_trip_id', 'datetime']).\
+            to_sql('bus_position', dbconn, if_exists='append', schema='etl', index=False)
     
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
     pg.commit()
@@ -146,6 +153,15 @@ while dt.now() < finish_time and n < 50000:
     pg.commit()
     
     
+    dupes = check_for_dupes()
+    if len(dupes) > 0:
+        logging.error("duplicate records found!")
+        dupes.to_csv("dupes.csv")
+        df.to_csv("dupes_df.csv")
+        df1.to_csv("dupes_df1.csv")
+        raise Exception("duplicates found")
+
+    df = df1
     sleep(10)
     n += 1
     # today = dt.now().date()
