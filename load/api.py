@@ -3,6 +3,7 @@ import json
 from db import Db
 # import psycopg2 as pg
 import pandas as pd
+from pandas.io import sql # optional: for executing additonal SQL
 from time import sleep
 from datetime import  datetime as dt
 from datetime import timedelta
@@ -49,23 +50,43 @@ params = {
 
 
 def initial():
-    df = pd.read_sql("""
+    df = pd.read_sql('''
     select * from 
         (select *, row_number() over (partition by scheduled_trip_id order by datetime desc) as order_num
         from bus_position) as a
     where order_num = 1
-    """, dbconn)
+    ''', dbconn)
     del df['order_num']
+    del df['the_geom']
     df['datetime'] = pd.to_datetime(df['datetime'])
-    df.set_index(['scheduled_trip_id', 'datetime'], inplace=True)
+    df['scheduled_trip_id'] = pd.to_numeric(df['scheduled_trip_id'])
+    #df.set_index(['scheduled_trip_id', 'datetime'], inplace=True)
     return df
 
+
+"""
+def initial():
+    cur.execute('''drop table if exist etl.initial''')
+    pg.commit()
+    cur.execute('''create table etl.initial
+    as
+      select * from 
+        (select *, row_number() over (partition by scheduled_trip_id order by datetime desc) as order_num
+        from bus_position) as a
+    where order_num = 1
+    ''')
+    cur.execute("create index idx_initial on etl.initial(scheduled_trip_id, datetime)")
+    pg.commit()
+    
+    return 0
+"""
 def call_api():
     # https://developer.wmata.com/Products
     # Default Tier
     # "Rate limited to 10 calls/second and 50,000 calls per day"
     try:
-        req = requests.get('http://api.wmata.com/Bus.svc/json/jBusPositions', headers=headers, params=params)
+        req = requests.get('http://api.wmata.com/Bus.svc/json/jBusPositions',
+                           headers=headers, params=params)
         
         data = json.loads(req.text)
         
@@ -84,7 +105,7 @@ def call_api():
             })
         df['datetime'] = pd.to_datetime(df['datetime'])
         df['scheduled_trip_id'] = pd.to_numeric(df['scheduled_trip_id'])
-        df.set_index(['scheduled_trip_id', 'datetime'], inplace=True) # should be unique by this row
+        #df.set_index(['scheduled_trip_id', 'datetime'], inplace=True) # should be unique by this row
         return df 
     except Exception as e:
         raise Exception(e)
@@ -93,20 +114,20 @@ def call_api():
 
 free_limit_gb = 20
 def db_size():
-    sz= pd.read_sql("""
+    sz= pd.read_sql('''
         SELECT sum( pg_total_relation_size(oid) ) AS total_bytes
           FROM pg_class 
-       """, dbconn)
+       ''', dbconn)
     return round(float(sz['total_bytes'][0])/(10**9), 2)
 
 
 def check_for_dupes():
-    dupes = pd.read_sql("""
+    dupes = pd.read_sql('''
         select scheduled_trip_id, datetime, count(*)
         from bus_position
         group by 1,2
         having count(*) > 1
-        """, dbconn)
+        ''', dbconn)
     return dupes
 #%%
 n = 0 # TODO: initialize n from db
@@ -131,28 +152,47 @@ while dt.now() < finish_time and n < 50000:
     df1 = call_api()
     print("n = {}".format(n))
     
+    joined = df1.merge(df, how='left', on=['scheduled_trip_id', 'datetime'],
+                       suffixes=('','_old'))
+    keep_cols = [col for col in joined.columns if col.find('_old')==-1]
+    new = joined[pd.isnull(joined['lat_old'])][keep_cols]
+    
+    df = joined[keep_cols]
+    """
     stale = df1[df1.index.isin(df.index)]
     # only add to the db if the position has been updated (trip id + timestamp is different)
     new = df1[~df1.index.isin(df.index)] # this now **only has the new values**
 
     nclean = len(df1)
-    df = df1
+    """
+    """
+    new = pd.concat([df, df1], ignore_index =True).\
+        drop_duplicates(subset=['scheduled_trip_id', 'datetime'], keep=False)
+    df = pd.concat([df, df1]).drop_duplicates(subset=['scheduled_trip_id', 'datetime'])
+    """
+    #df = df1
 
     #df = df.rename(columns={})
 
-    logging.info('{} updated records, {} stale records.'.format(nclean, len(stale) ))
+    #logging.info('{} updated records, {} stale records.'.format(nclean, len(stale) ))
 
     cur.execute('truncate table etl.bus_position')
     pg.commit()
     
+    """
     new.reset_index().drop_duplicates(
             subset=['scheduled_trip_id', 'datetime']).to_sql(
                     'bus_position', dbconn, if_exists='append', 
               schema='etl', index=False)
-    
+    """
+    new.to_sql('bus_position', dbconn, if_exists='append', 
+              schema='etl', index=False)
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
     pg.commit()
-    cur.execute('insert into public.bus_position select * from etl.bus_position')
+    
+    cur.execute('''insert into public.bus_position
+                select *
+                from etl.bus_position ''')
     pg.commit()
     
     
