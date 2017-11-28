@@ -56,6 +56,7 @@ def initial():
     where order_num = 1
     """, dbconn)
     del df['order_num']
+    df['datetime'] = pd.to_datetime(df['datetime'])
     df.set_index(['scheduled_trip_id', 'datetime'], inplace=True)
     return df
 
@@ -82,6 +83,7 @@ def call_api():
                 'vehicleid': 'vehicle_id'
             })
         df['datetime'] = pd.to_datetime(df['datetime'])
+        df['scheduled_trip_id'] = pd.to_numeric(df['scheduled_trip_id'])
         df.set_index(['scheduled_trip_id', 'datetime'], inplace=True) # should be unique by this row
         return df 
     except Exception as e:
