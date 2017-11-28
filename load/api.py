@@ -134,8 +134,9 @@ while dt.now() < finish_time and n < 50000:
     cur.execute('truncate table etl.bus_position')
     pg.commit()
     
-    df = df.reset_index().drop_duplicates(subset=['scheduled_trip_id', 'datetime'])
-    df.to_sql('bus_position', dbconn, if_exists='append', 
+    df.reset_index().drop_duplicates(
+            subset=['scheduled_trip_id', 'datetime']).to_sql(
+                    'bus_position', dbconn, if_exists='append', 
               schema='etl', index=False)
     
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')

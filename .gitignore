@@ -4,3 +4,4 @@ delete*
 __pycache__*
 load/gtfs/wmata/*.txt
 load/match/results/*
+*.log
