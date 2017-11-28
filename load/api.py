@@ -70,7 +70,17 @@ def call_api():
         
         df = pd.DataFrame(data['BusPositions'])
         df.columns = df.columns.str.lower()
-        df = df.rename(columns={'tripid':'scheduled_trip_id', 'routeid': 'route_short_name'})
+        df = df.rename(
+            columns={
+                'tripid':'scheduled_trip_id', 
+                'routeid': 'route_short_name',
+                'directionnum':'direction_num',
+                'directiontext': 'direction_text',
+                'tripendtime': 'trip_end_time',
+                'tripstarttime': 'trip_start_time',
+                'tripheadsign': 'trip_headsign',
+                'vehicleid': 'vehicle_id'
+            })
         df.set_index(['scheduled_trip_id', 'datetime'], inplace=True) # should be unique by this row
         return df 
     except Exception as e:
@@ -108,29 +118,31 @@ while dt.now() < finish_time and n < 50000:
 
     df1 = call_api()
 
+    
     stale = df1[df1.index.isin(df.index)]
     # only add to the db if the position has been updated (trip id + timestamp is different)
     df1 = df1[~df1.index.isin(df.index)]
+
     nclean = len(df1)
     df = df1
 
-    df = df.rename(columns={'directionnum':'direction_num',
-        'directiontext': 'direction_text',
-        'tripendtime': 'trip_end_time',
-        'tripstarttime': 'trip_start_time',
-        'tripheadsign': 'trip_headsign',
-        'vehicleid': 'vehicle_id'})
+    #df = df.rename(columns={})
     
 
     logging.info('{} - {} updated records, {} stale records.'.format(dt.now(), nclean, len(stale) ))
 
-    df.reset_index().to_sql('bus_position', dbconn, if_exists='append', 
+    cur.execute('truncate table etl.bus_position')
+    pg.commit()
+    
+    df = df.reset_index().drop_duplicates(subset=['scheduled_trip_id', 'datetime'])
+    df.to_sql('bus_position', dbconn, if_exists='append', 
               schema='etl', index=False)
     
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
     pg.commit()
     cur.execute('insert into public.bus_position select * from etl.bus_position')
     pg.commit()
+    
     
     sleep(10)
     n += 1

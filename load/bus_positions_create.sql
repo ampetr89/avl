@@ -62,3 +62,4 @@ create table public.bus_position_match(
 	edge_seq_num int
 
 )
+;
