@@ -1,7 +1,6 @@
 import requests
 import json
-from db import Db
-# import psycopg2 as pg
+from db import Db # handles the sqlalchemy as psycopg2 imports
 import pandas as pd
 from pandas.io import sql # optional: for executing additonal SQL
 from time import sleep
@@ -9,7 +8,7 @@ from datetime import  datetime as dt
 from datetime import timedelta
 import logging
 import os
-
+from io import StringIO
 import sys
 
 if len(sys.argv) > 1:
@@ -64,22 +63,6 @@ def initial():
     return df
 
 
-"""
-def initial():
-    cur.execute('''drop table if exist etl.initial''')
-    pg.commit()
-    cur.execute('''create table etl.initial
-    as
-      select * from 
-        (select *, row_number() over (partition by scheduled_trip_id order by datetime desc) as order_num
-        from bus_position) as a
-    where order_num = 1
-    ''')
-    cur.execute("create index idx_initial on etl.initial(scheduled_trip_id, datetime)")
-    pg.commit()
-    
-    return 0
-"""
 def call_api():
     # https://developer.wmata.com/Products
     # Default Tier
@@ -129,6 +112,17 @@ def check_for_dupes():
         having count(*) > 1
         ''', dbconn)
     return dupes
+
+def bulk_insert(df, table, schema="public"):
+    header = ','.join(df.columns)
+    f = StringIO(df.to_csv(index=False))
+    f.readline() # remove header
+    copy_statement = "COPY {}.{} ({}) FROM STDIN WITH (FORMAT csv);".format(schema, table, header)
+    cur.copy_expert(copy_statement, f)
+    f.close()
+    pg.commit()
+    return 0
+
 #%%
 n = 0 # TODO: initialize n from db
 start_day = dt.now().date()
@@ -146,11 +140,12 @@ finish_time = start_time + timedelta(minutes=run_minutes)
 
 logging.info("running for {} minutes (end time = {})".format(run_minutes, finish_time))
 
-
+interval_seconds = 5 ## TODO: make the interval_seconds a command line arg
 while dt.now() < finish_time and n < 50000:
-    
+    it_start = dt.now()
+
     df1 = call_api()
-    print("n = {}".format(n))
+    # print("n = {}".format(n))
     
     joined = df1.merge(df, how='left', on=['scheduled_trip_id', 'datetime'],
                        suffixes=('','_old'))
@@ -170,11 +165,11 @@ while dt.now() < finish_time and n < 50000:
         drop_duplicates(subset=['scheduled_trip_id', 'datetime'], keep=False)
     df = pd.concat([df, df1]).drop_duplicates(subset=['scheduled_trip_id', 'datetime'])
     """
-    #df = df1
 
-    #df = df.rename(columns={})
-
-    #logging.info('{} updated records, {} stale records.'.format(nclean, len(stale) ))
+    n_pulled = len(df1)
+    n_new = len(new)
+    n_stale = len(df1) - len(new)
+    logging.info('pulled {} records: {} are new, {} are stale records.'.format(n_pulled, n_new, n_stale ))
 
     cur.execute('truncate table etl.bus_position')
     pg.commit()
@@ -185,8 +180,10 @@ while dt.now() < finish_time and n < 50000:
                     'bus_position', dbconn, if_exists='append', 
               schema='etl', index=False)
     """
-    new.to_sql('bus_position', dbconn, if_exists='append', 
-              schema='etl', index=False)
+    #new.to_sql('bus_position', dbconn, if_exists='append', 
+    #          schema='etl', index=False)
+    bulk_insert(new, table='bus_position', schema='etl')
+
     cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
     pg.commit()
     
@@ -204,8 +201,10 @@ while dt.now() < finish_time and n < 50000:
         df1.to_csv("dupes_df1.csv")
         raise Exception("duplicates found")
 
-    #df = df1
-    sleep(10)
+    it_end = dt.now()
+    sleep_time = (it_end - it_start).total_seconds()
+    if sleep_time > 0:
+        sleep(sleep_time) 
     n += 1
     # today = dt.now().date()
 
