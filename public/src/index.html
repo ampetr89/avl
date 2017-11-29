@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AVL App</title>
+  <base href="/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--<link rel="icon" type="image/x-icon" href="favicon.ico"> -->
+
+  <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/style.css')}}">
+  
+  <!-- jquery -->
+  <script
+    src="https://code.jquery.com/jquery-3.2.1.min.js"
+    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+    crossorigin="anonymous"></script>
+
+    <!-- leaflet stylesheet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css"
+   integrity="sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=="
+   crossorigin=""/> 
+    <!-- leaflet.js. Make sure you put this AFTER Leaflet's CSS -->
+   <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"
+     integrity="sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=="
+     crossorigin=""></script> 
+
+
+<script type="text/javascript">
+      var shapes = [];
+      var shape_ids = [] ;
+      var current_shape;
+      $(document).load(function(){
+        console.log("document ready (inside of map component)")
+
+      var mymap = L.map('map').setView([ 38.9079017, -77.0355275], 13);
+      //mapboxgl.accessToken = "pk.eyJ1IjoiYW5uYW1wZXRyb25lIiwiYSI6ImU0NzFkZmI3M2EyYThlNjc4MGI0ZWVjOGVjNDU2OTNkIn0.3uRcGR7rnA1xvW7j-aWFtQ" // todo: store serverside?
+
+      var CartoDB_Positron = L.tileLayer(
+        'https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', 
+        { attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+      });
+      /*var OpenStreetMap_Mapnik = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        });*/
+      CartoDB_Positron.addTo(mymap);
+
+      // https://www.mapbox.com/mapbox-gl-js/api/#map
+      /*var mymap = new mapboxgl.Map({
+        container: 'map', // div id
+        style: 'mapbox://styles/annampetrone/cjad5mykb4xfw2rpamtmwm928' ,
+        zoom: 11,
+        center: [-77.0355275, 38.9079017]
+
+      }) ;*/
+
+      plotShape = function(shape_id){
+        idx = shape_ids.indexOf(shape_id)
+        
+        if (current_shape){
+          mymap.removeLayer(current_shape)
+        }
+        
+        let shape = shapes[idx]
+        let coords = JSON.parse(shape.geojson)['coordinates']
+        current_shape = L.polyline(coords, {color: 'black'})
+        current_shape.addTo(mymap);
+      }
+
+      $('form').submit(function(e){
+          e.preventDefault();
+          console.log('form submitted');
+          
+          let formVals = $(this).serializeArray();
+          let route_id = '42'; //formVals[0]['value'];
+          console.log(route_id);
+          $.get(`/shape/gtfs/${route_id}`, function(results){
+            console.log("gtfs coords",results);
+            
+            shapes = results.data
+            for (let shape of results.data){
+              //coords = JSON.parse(shape.geojson);
+              //L.polyline(coords, {color: 'black'}).addTo(mymap);
+              shape_ids.push(shape.shape_id);
+              $('#shape-dropdown').append(`
+                <option value="${shape.shape_id}">
+                 ${shape.trip_headsign} - ${shape.shape_id}
+                </option>`)
+              //shapes.push(coords)
+            }
+            
+
+            // plot the first one, which will be selected by default
+            let first_id = shapes[0]['shape_id']
+            //plotShape(first_id)
+            //$(`#shape-dropdown option[value="${first_id}"]`).attr('selected','selected')
+          $('#shape-dropdown').show();
+
+            
+            /*for (coord of shape1){
+              L.circleMarker({lat:coord[0], lon:coord[1]},
+                {radius: 1, color:'blue',fillColor:'black'}).addTo(mymap)
+            }*/
+            /*mymap.addLayer({
+                "id": "gtfs-shape",
+                "type": "line",
+                "source": {
+                    "type": "geojson",
+                    "data": shape1
+                }})*/
+          });
+          
+          $.get(`/shape/matched/${route_id}`, function(results){
+            console.log("matched coords",results);
+            shape1 = JSON.parse(results.data[0].geojson)['coordinates'];
+            L.polyline(shape1, {color: 'red', weight: 2}).addTo(mymap);
+            
+          });
+
+          $.get(`/gps/${route_id}`, function(results){
+            console.log("gps coords",results);
+            
+            /*L.polyline(shape1, {color: 'greem', weight: 1}).addTo(mymap);*/
+            for (feature of results.data){
+              coord = JSON.parse(feature['geojson'])['coordinates']
+              
+              L.circleMarker({lat:coord[0], lon:coord[1]},
+                {radius: 2, color:'green'}).addTo(mymap)
+            }
+          });
+
+
+
+          return false
+        })
+
+        $('#shape-dropdown').change(function(e){
+          selected_id = $('#shape-dropdown option').filter(':selected').val()
+          //plotShape(selected_id)
+        })
+
+        $('form').submit();
+
+      })
+      
+
+     </script>
+</head>
+<body>
+	Hello
+  <app-root></app-root>
+</body>
+</html>

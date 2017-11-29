@@ -1,0 +1,22 @@
+  
+     <!-- mapbox -->
+     <!--<script src='https://api.mapbox.com/mapbox-gl-js/v0.42.1/mapbox-gl.js'></script>
+     <link href='https://api.mapbox.com/mapbox-gl-js/v0.42.1/mapbox-gl.css' rel='stylesheet' />-->
+
+     
+
+
+  <form type="GET" action="/route">
+    <select name="route">
+      <option disabled selected>Select a Route</option>
+      
+        <option *ngFor ="let route in routes" value="{{route}}">{{route}}</option>
+      
+    </select>
+    <select name="shapeid" id="shape-dropdown" style="display:none">
+      
+    </select>
+    <input type="submit" value="Update">
+  </form>
+
+  <div id="map"></div>
