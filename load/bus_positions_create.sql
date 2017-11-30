@@ -54,12 +54,23 @@ create table public.bus_position_match(
     route_short_name varchar(50),
     direction_text varchar(50),
     trip_headsign varchar(100),
-	lon float, 
-	lat float,
+	gps_lon float, 
+	gps_lat float,
 	deviation float,
 	vehicle_id varchar(10),
+
+    way_id bigint, 
+    begin_heading float, 
+    end_heading float, 
+    weighted_grade float, 
+    speed float, 
+    road_class varchar(30), 
+    length float,
+
 	shape_id varchar(100),
-	edge_seq_num int
+	edge_seq_num int,
+    edge_geom geometry(linestring, 4326),
+    dist_rank int
 
 )
 ;

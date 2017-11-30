@@ -1,0 +1,6 @@
+#map, #bar-chart, #animation, #line-chart{
+		display: block;
+		vertical-align: top;
+		border: 1px solid red;
+		min-height: 400px
+	}

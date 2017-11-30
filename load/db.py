@@ -1,11 +1,13 @@
 from sqlalchemy import create_engine
 import psycopg2 as pg
+import os
 
 class Db():
 	def __init__(self):
 		url = 'postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}'
 
-		with open('password.txt', 'r') as f:
+		path = os.path.dirname(os.path.abspath(__file__))
+		with open(os.path.join(path,'password.txt'), 'r') as f:
 			pw = f.read().strip()
 		# http://initd.org/psycopg/docs/module.html
 		# modify this to use your own credentials and database:

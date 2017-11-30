@@ -203,8 +203,8 @@ while dt.now() < finish_time and n < 50000:
 
     it_end = dt.now()
     sleep_time = (it_end - it_start).total_seconds()
-    if sleep_time > 0:
-        sleep(sleep_time) 
+    if sleep_time > 0 and sleep_time <= 5:
+        sleep(5 - sleep_time) 
     n += 1
     # today = dt.now().date()
 
