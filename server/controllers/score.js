@@ -1,12 +1,12 @@
 db = require('../config/postgres');
 
 function getRanking(req, res, next) {
-  db.any(`select names, count(*) as value
+  db.any(`select * from (select names, count(*) as value
             from gtfs.matched_ways 
             where names is not null
             group by names
             order by value desc
-            limit 50`)
+            limit 50) as a order by value asc`)
     .then(function (data) {
       res.status(200)
         .json({

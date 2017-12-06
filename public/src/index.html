@@ -34,33 +34,58 @@
       console.log("document ready (inside of map component)")
 
       L.mapbox.accessToken = 'pk.eyJ1IjoiYW5uYW1wZXRyb25lIiwiYSI6ImU0NzFkZmI3M2EyYThlNjc4MGI0ZWVjOGVjNDU2OTNkIn0.3uRcGR7rnA1xvW7j-aWFtQ';
-      var mymap = L.mapbox.map('map', 'mapbox.light')
+      /*var mymap = L.mapbox.map('map', 'mapbox.light')
           .setView([38.9079017, -77.0355275], 13);
-
+      */
       // BAR CHART
-      console.log("trying to make bar-chart")
-      var data = [{
-        type: 'bar',
-        x: [20, 14, 23],
-        y: ['giraffes', 'orangutans', 'monkeys'],
-        orientation: 'h'
-      }];
-      /*var layout = {
-        autosize: false,
-        width: 500,
-        height: 500,
-        margin: {
-        l: 5,
-        r: 5,
-        b: 10,
-        t: 10,
-        pad: 4
-        },
-        paper_bgcolor: '#7f7f7f',
-        plot_bgcolor: '#c7c7c7'
-      };*/
-      Plotly.newPlot('bar-chart', data); // layout
+      
+      $.get(`/api/score/ranking`, function(results){
+        // TODO make number to get a query param
+        console.log("trying to make bar-chart")
+        var data = [{
+          type: 'bar',
+          x: results.data.map(o=> {return o.value}),
+          y: results.data.map(o=> {return o.names}),
+          orientation: 'h'
+        }];
+        var layout = {
+          title: "Streets ranked by schedule delays",
+          autosize: true,
+          width: 500,
+          height: 900,
+          margin: {
+            //l: 300, //r, b
+            //t: 100,
+            l:0,
+            r:0,
+            t:0,
+            b:0
+          },
+          xaxis:{
+            fixedrange: true,
+          },
 
+          yaxis: {
+            fixedrange: true,
+            tickfont: {
+                size: 8
+              }
+          },
+          paper_bgcolor: 'white',
+          plot_bgcolor: 'rgb(250,250,250)'
+        };
+        Plotly.newPlot('bar-chart', data, layout, {displayModeBar: false});//,{scrollZoom: true}
+      })
+
+      barchart = $('#bar-chart');
+      barchart.on('plotly_click', function(e, data){
+          console.log(data.points[0].pointNumber);
+          //console.log($(this))
+      })
+      /*$(document).on('click', 'g.point', function(e){
+        console.log('clicked', e)
+      })*/
+      //})
 
 
       // LINE CHART
