@@ -141,7 +141,7 @@ CREATE TABLE gtfs.shapes (
     shape_dist_traveled VARCHAR(50)/*,
     KEY shape_id (shape_id)*/
 );
- 
+
 
 DROP TABLE IF EXISTS gtfs.stops
 ;

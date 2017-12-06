@@ -39,7 +39,7 @@ app.use(express.static(path.join(__dirname, '/public/dist')));
 
 
 // set up routes
-//app.use('/avl/gps', require('./server/config/routes/gps'));
+app.use('/api/score', require('./server/config/routes/score'));
 
 
 app.use(require('./server/config/routes/catchall'))

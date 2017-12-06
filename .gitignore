@@ -1,6 +1,7 @@
 password.txt
 scratch*
 delete*
+create_api_user.sql
 __pycache__*
 load/gtfs/wmata/*.txt
 load/match/results/*

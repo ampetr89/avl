@@ -1,3 +1,26 @@
+// http://mherman.org/blog/2016/03/13/designing-a-restful-api-with-node-and-postgres/#.Wig3lUqnE2w
+var promise = require('bluebird')
+
+var options = {
+  // Initialization Options
+  promiseLib: promise
+};
+
+
+var pgp = require('pg-promise')(options);
+const cn = {
+    host: 'avl.cgzfeinbmbkk.us-east-1.rds.amazonaws.com',
+    port: 5432,
+    database: 'avl',
+    user: 'api',
+    password: '1'
+};
+//var connectionString = 'api://avl.cgzfeinbmbkk.us-east-1.rds.amazonaws.com:5432/avl';
+//var db = pgp(connectionString);
+const db = pgp(cn);
+module.exports = db;
+
+/*
 const pg = require('pg');
 var fs = require('fs');
 var path = require('path');
@@ -29,8 +52,4 @@ fs.readdirSync(models_path).forEach(function(file) {
   }
 });
 
-/*
-const query = client.query(
-  'CREATE TABLE items(id SERIAL PRIMARY KEY, text VARCHAR(40) not null, complete BOOLEAN)');
-query.on('end', () => { client.end(); });
 */

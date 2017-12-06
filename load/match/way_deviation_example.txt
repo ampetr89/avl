@@ -1,0 +1,9 @@
+5 min ahead -> 10 min ahead | (-10) - (-5) | -5
+5 min ahead ->  3 min ahead | (-3) - (-5) | 2
+5 min ahead -> 2 min behind | 2 - (-5) | 7
+
+"Positive values (of deviation) indicate that the bus is running late while negative ones are for buses running ahead of schedule."
+
+So if the change is negative, this means the bus became *more ahead of schedule / less behind schedule." If the change is positive
+this means the bus became "less ahead of schedule/ more behind schedule". 
+...TL;DR change < 0 means good, change > 0 means bad

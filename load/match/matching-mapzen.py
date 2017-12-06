@@ -7,6 +7,7 @@ sys.path.append('../')
 from db import Db
 import polyline
 from io import StringIO
+import os 
 
 db = Db()
 dbconn = db.conn
@@ -37,13 +38,13 @@ url_args = {
 }
 
 
-start_time, end_time = '2017-11-27 06:30:00', '2017-11-27 07:30:00'
+start_time, end_time = '2017-11-30 06:30:00', '2017-11-30 10:30:00'
 
 shapes_to_get = pd.read_sql("""
-    select shape_id, ST_asgeojson(the_geom) as geojson
-    from gtfs.shape_line
-    where shape_id in (
-        select shape_id
+    select A.shape_id, ST_asgeojson(the_geom) as geojson, ngps, ntrips
+    from gtfs.shape_line as A
+    join (
+        select shape_id, count(distinct a.scheduled_trip_id) as ntrips, sum(ngps) as ngps
             from
             (select scheduled_trip_id, count(*) as ngps
             from bus_position
@@ -52,20 +53,20 @@ shapes_to_get = pd.read_sql("""
             ) as a
             join gtfs.trips as b
              on a.scheduled_trip_id = b.scheduled_trip_id
-        )
-      and shape_id not in (select distinct shape_id from gtfs.matched_shape)
+         group by 1
+        ) as B
+       on A.shape_id = B.shape_id
+      where A.shape_id not in (select distinct shape_id from gtfs.matched_shape)
+      order by ntrips desc, ngps desc
     """, dbconn, params={'start_time': start_time, 'end_time': end_time})
 print('pulled {} shapes'.format(len(shapes_to_get)))
 #print(shapes_to_get.head())
 
 
-
-cur.execute('truncate table etl.matched_ways');
-pg.commit()
-
-from_local = False 
+# from_local = False 
 
 def pg_to_sql(df, table, schema="gtfs"):
+    # https://wiki.postgresql.org/wiki/Psycopg2_Tutorial
     # print('loading {} rows to {}'.format(len(df), table))
     f = StringIO(df.to_csv(sep=",", index=False, header=False))
 
@@ -75,86 +76,84 @@ def pg_to_sql(df, table, schema="gtfs"):
     cur.copy_expert(copy_statement, f)
     pg.commit()
 
-def update_way_geom(shape_id):
+def insert_matched_ways():
     cur.execute("""
-        alter table etl.matched_ways
-        add column start_lon float,
-        add column start_lat float,
-        add column end_lon float,
-        add column end_lat float
-        """)
-
-    cur.execute("""
-        update etl.matched_ways as a
-        set start_lon = b.lon, start_lat = b.lat
-        from gtfs.matched_shape as b
-         where b.shape_id = '{}'
-         and a.begin_shape_index = b.shape_seq_num
-        """.format(shape_id))
-    cur.execute("""
-        update etl.matched_ways as a
-        set end_lon = b.lon, end_lat = b.lat
-        from gtfs.matched_shape as b
-         where b.shape_id = '{}'
-         and a.end_shape_index = b.shape_seq_num
-        """.format(shape_id))
-
-    cur.execute("""
-        update etl.matched_ways set the_geom = 
-        ST_SETSRID(ST_MAKELINE(ST_makepoint(start_lon, start_lat), ST_makepoint(end_lon, end_lat)), 4326)
-        """)
-
-    cur.execute("""
-        alter table etl.matched_ways
-        drop column start_lon,
-        drop column start_lat,
-        drop column end_lon,
-        drop column end_lat
+        insert into etl.matched_ways_geom
+        select a1.shape_id, edge_seq_num,
+           ST_SetSRID(ST_MakeLine(ST_MakePoint(lon, lat) order by shape_seq_num), 4326) as the_geom
+         from etl.matched_ways as a1
+         join gtfs.matched_shape as b1
+          on a1.shape_id = b1.shape_id
+         and b1.shape_seq_num between a1.begin_shape_index and a1.end_shape_index
+         group by 1,2
         """)
 
     cur.execute("""
         insert into gtfs.matched_ways
-        select * from etl.matched_ways
+            select a.*, b.the_geom
+            from etl.matched_ways as a
+            join etl.matched_ways_geom as b
+              on a.shape_id = b.shape_id
+             and a.edge_seq_num = b.edge_seq_num
         """)
     pg.commit()
 
+
+nlocal = 0
+napi = 0
 nshapes = len(shapes_to_get)
-for i in range(nshapes):
+for i, record in shapes_to_get.iterrows():
+    cur.execute('truncate table etl.matched_ways');
+    cur.execute('truncate table etl.matched_ways_geom');
+    pg.commit()
     
-    record = shapes_to_get.iloc[i]
+    #record = shapes_to_get.iloc[i]
     shape_id = record['shape_id']
     print('{}: {} / {}'.format(shape_id, i+1, nshapes))
     coords = json.loads(record['geojson'])['coordinates']
 
+    
     # print('{} total coordinates'.format(len(coords)))
     
     coord_list = [ {'lon': coord[0], 'lat': coord[1]} for coord in coords]
     
     url_args.update({'shape': coord_list})
+    
+    result_file_name = 'results/shape_{}.json'.format(shape_id)
+    from_local = os.path.isfile(result_file_name)
+    
     if from_local:
-        with open('results/shape_{}.json'.format(shape_id), 'r') as f:
+        nlocal += 1
+        with open(result_file_name, 'r') as f:
             response = json.loads(f.read())
     
     else:
+        napi += 1
+        # save all api results to a file
         r = requests.get(url , data=json.dumps(url_args))
-        with open('results/shape_{}.json'.format(shape_id), 'w') as f:
+        with open(result_file_name, 'w') as f:
             f.write(r.text)
         response = json.loads(r.text)
 
     
     if 'matched_points' in response:
         matched_points = pd.DataFrame(response['matched_points'])
-        matched_points['shape_pt_sequence'] = range(1, len(matched_points)+1)
+        matched_points['shape_pt_sequence'] = range(0, len(matched_points))
     else:
         print('warning: matched_points field not provided in response')    
     
+    if 'edges' not in response:
+        print('warning: edges field not provided in response. skipping this shape')
+        continue
+
     matched_ways = pd.DataFrame(response['edges'])
     if 'names' in matched_ways:
         matched_ways['names'] = matched_ways['names'].apply(lambda x: ' / '.join(x) if type(x)==list else x)
     else:
         matched_ways['names'] = ''
+
     matched_ways['shape_id'] = shape_id
-    matched_ways['edge_seq_num'] = range(1, len(matched_ways)+1)
+    matched_ways['edge_seq_num'] = range(0, len(matched_ways))
 
     
     matched_shape = polyline.decode(response['shape'])
@@ -163,17 +162,17 @@ for i in range(nshapes):
     matched_shape['shape_id'] = shape_id
     matched_shape['shape_seq_num'] = range(0, len(matched_shape)) ## this one has to start at 0 so that it matches the mapzen "begin/end_shape_index"
     
-    #print('loading results')
     
-    #https://wiki.postgresql.org/wiki/Psycopg2_Tutorial
 
     if 'matched_points' in response:
+        # matched_point table is not that useful
+        # just shows mapping between points you gave it and matched points
         pg_to_sql(matched_points,'matched_point')
+
     pg_to_sql(matched_shape,'matched_shape')
     pg_to_sql(matched_ways,'matched_ways', schema="etl")
-    update_way_geom(shape_id)
 
-    
-#https://api.mapbox.com/mapbox/driving/-117.1728265285492,32.71204416018209;-117.17288821935652,32.712258556224;-117.17293113470076,32.712443613445814;-117.17292040586472,32.71256999376694;-117.17298477888109,32.712603845608285;-117.17314302921294,32.71259933203019;-117.17334151268004,32.71254065549407?access_token={}
-#https://api.mapbox.com/matching/v5/mapbox/driving/-117.1728265285492,32.71204416018209;-117.17288821935652,32.712258556224;-117.17293113470076,32.712443613445814;-117.17292040586472,32.71256999376694;-117.17298477888109,32.712603845608285;-117.17314302921294,32.71259933203019;-117.17334151268004,32.71254065549407?access_token
-print('Done')
+    insert_matched_ways()
+
+
+print('Done. Used {} api calls and read {} from local file'.format(napi, nlocal))
