@@ -6,7 +6,7 @@ function getRanking(req, res, next) {
             where names is not null
             group by names
             order by value desc
-            limit 50) as a order by value asc`)
+            limit 25) as a order by value asc`)
     .then(function (data) {
       res.status(200)
         .json({

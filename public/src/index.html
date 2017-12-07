@@ -34,12 +34,14 @@
       console.log("document ready (inside of map component)")
 
       L.mapbox.accessToken = 'pk.eyJ1IjoiYW5uYW1wZXRyb25lIiwiYSI6ImU0NzFkZmI3M2EyYThlNjc4MGI0ZWVjOGVjNDU2OTNkIn0.3uRcGR7rnA1xvW7j-aWFtQ';
-      /*var mymap = L.mapbox.map('map', 'mapbox.light')
+      var mymap = L.mapbox.map('map', 'mapbox.light', {minZoom: 11})
           .setView([38.9079017, -77.0355275], 13);
-      */
+      // TODO: set bounds on the map 
+
       // BAR CHART
-      
-      $.get(`/api/score/ranking`, function(results){
+      var nranking = 25;
+      var bars = [];
+      $.get(`/api/score/ranking?n={nranking}`, function(results){
         // TODO make number to get a query param
         console.log("trying to make bar-chart")
         var data = [{
@@ -51,14 +53,14 @@
         var layout = {
           title: "Streets ranked by schedule delays",
           autosize: true,
-          width: 500,
-          height: 900,
+          /*width: 500,*/
+          height: 500, // figure out # of pixels you want per road
           margin: {
             //l: 300, //r, b
             //t: 100,
-            l:0,
-            r:0,
-            t:0,
+            l:200,
+            r:20,
+            t:50,
             b:0
           },
           xaxis:{
@@ -68,24 +70,36 @@
           yaxis: {
             fixedrange: true,
             tickfont: {
-                size: 8
+                size: 9
               }
           },
           paper_bgcolor: 'white',
           plot_bgcolor: 'rgb(250,250,250)'
         };
         Plotly.newPlot('bar-chart', data, layout, {displayModeBar: false});//,{scrollZoom: true}
+        bars = $('#bar-chart g.point path');
       })
 
       barchart = $('#bar-chart');
       barchart.on('plotly_click', function(e, data){
-          console.log(data.points[0].pointNumber);
-          //console.log($(this))
+          barnum = data.points[0].pointNumber;
+          var showAll = false;
+          if( $(bars[barnum]).hasClass('selected')){
+              // click on the currently selected road to clear the selection
+              // and go back to showing all roads
+              $(bars).css('fill','rgb(31, 119, 180)');
+              showAll = true; 
+          }else{
+            $(bars).removeClass('selected');
+            $(bars[barnum]).addClass('selected');
+            $(bars).css('fill','gray');
+            $(bars[barnum]).css('fill','orange');
+          }
+
+          if(!showAll){
+              
+          }
       })
-      /*$(document).on('click', 'g.point', function(e){
-        console.log('clicked', e)
-      })*/
-      //})
 
 
       // LINE CHART

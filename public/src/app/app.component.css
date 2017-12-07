@@ -5,18 +5,21 @@ section{
 #map, #bar-chart, #animation, #line-chart{
 	display: inline-block;
 	/*vertical-align: top;*/
-	border: 1px solid red;
+	border: 1px solid silver;
 	min-height: 400px
 }
 
+#map, #bar-chart{
+    height: 50vh;
+}
+
 #map{
-    height: 600px;
-    flex-basis: 65%
+    
+    flex-basis: 65%;
     margin: 0 auto;
 }
 
 #bar-chart{
-    height: 600px;
     flex-basis: 35%;
     overflow-y: scroll;
 }
