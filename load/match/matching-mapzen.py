@@ -42,7 +42,7 @@ start_time, end_time = '2017-11-30 06:30:00', '2017-11-30 10:30:00'
 
 shapes_to_get = pd.read_sql("""
     select A.shape_id, ST_asgeojson(the_geom) as geojson, ngps, ntrips
-    from gtfs.shape_line as A
+    from gtfs.shape_stops_removed_line as A
     join (
         select shape_id, count(distinct a.scheduled_trip_id) as ntrips, sum(ngps) as ngps
             from
@@ -58,6 +58,7 @@ shapes_to_get = pd.read_sql("""
        on A.shape_id = B.shape_id
       where A.shape_id not in (select distinct shape_id from gtfs.matched_shape)
       order by ntrips desc, ngps desc
+      limit 25
     """, dbconn, params={'start_time': start_time, 'end_time': end_time})
 print('pulled {} shapes'.format(len(shapes_to_get)))
 #print(shapes_to_get.head())
@@ -112,7 +113,6 @@ for i, record in shapes_to_get.iterrows():
     print('{}: {} / {}'.format(shape_id, i+1, nshapes))
     coords = json.loads(record['geojson'])['coordinates']
 
-    
     # print('{} total coordinates'.format(len(coords)))
     
     coord_list = [ {'lon': coord[0], 'lat': coord[1]} for coord in coords]
