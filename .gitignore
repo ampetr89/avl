@@ -6,6 +6,10 @@ __pycache__*
 load/gtfs/wmata/*.txt
 load/match/results/*
 *.log
+*.osm2pgsql-shapefiles/
+*.zip
+*.csv
+*.json
 # See http://help.github.com/ignore-files/ for more about ignoring files.
 
 # compiled output
