@@ -93,7 +93,9 @@ def get_trips(shape_id, start_time, end_time):
           select scheduled_trip_id from bus_position_match 
          where datetime between %(start_time)s and %(end_time)s group by 1)
       group by 1
-    ''', dbconn, params={'shape_id': shape_id, 'start_time': start_time, 'end_time': end_time})
+    ''', 
+    dbconn, 
+    params={'shape_id': shape_id, 'start_time': start_time, 'end_time': end_time})
 
   return trips_to_match['scheduled_trip_id']
 
@@ -103,13 +105,11 @@ def match_gps(scheduled_trip_id):
   ''')
 
   cur.execute('''
-  create table bus_position_temp_trip
+  create table bus_position_temp_trip -- contains just this particular trip
   as 
-  select * /*from (*/
-  /*  select *, row_number() over (partition by datetime order by 1) as dup_num */
-   from bus_position_temp
+  select * 
+   from bus_position_temp -- contains just the trips with this shape
    where scheduled_trip_id = %(scheduled_trip_id)s
-  /*)  as a where dup_num = 1 */
   ''', {'scheduled_trip_id': scheduled_trip_id}
     )
 
@@ -133,6 +133,7 @@ def match_gps(scheduled_trip_id):
     lon as gps_lon, lat as gps_lat, deviation, vehicle_id, 
     way_id, begin_heading, end_heading, weighted_grade, speed_limit, road_class, length,
     shape_id, edge_seq_num,
+
    /* edge_geom as the_geom, -- writing geometry can slow things down */
     row_number() over (partition by scheduled_trip_id, datetime order by dist_meters asc) as dist_rank
   from 
@@ -145,10 +146,11 @@ def match_gps(scheduled_trip_id):
       from bus_position_temp_trip as a  
       join gtfs.trips as b
        on a.scheduled_trip_id = b.scheduled_trip_id 
+      join geog_conversion as g
+       on 1=1
       left join gtfs.matched_ways_temp as c
        on b.shape_id = c.shape_id
-       and ST_Dwithin(a.the_geom, c.the_geom, .0005) 
-
+       and ST_Dwithin(a.the_geom, c.the_geom, 50*g.mrad)
   ) as a ) as b
   where dist_rank = 1
   ''')

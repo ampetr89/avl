@@ -33,7 +33,8 @@ create table public.bus_position(
  scheduled_trip_id BIGINT,
  trip_start_time TIMESTAMP,
  vehicle_id VARCHAR(10),
- the_geom geometry(point, 4326)
+ the_geom geometry(point, 4326),
+ PRIMARY KEY(scheduled_trip_id,trip_start_time,vehicle_id,datetime)
  );
 
 create index idx_bus_position__trip on bus_position(scheduled_trip_id)

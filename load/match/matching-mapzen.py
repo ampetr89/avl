@@ -30,7 +30,7 @@ url_args = {
               "edge.names","edge.id", "edge.way_id", 
               "edge.weighted_grade","edge.speed", "edge.length",
               "edge.road_class", "edge.begin_heading", "edge.end_heading",
-            "edge.begin_shape_index", "edge.end_shape_index",
+            "edge.begin_shape_index", "edge.end_shape_index", 
             "matched.edge_index",
               "matched.distance_along_edge","matched.point", "matched.distance_from_trace_point",
               "matched.type"]},
@@ -58,7 +58,7 @@ shapes_to_get = pd.read_sql("""
        on A.shape_id = B.shape_id
       where A.shape_id not in (select distinct shape_id from gtfs.matched_shape)
       order by ntrips desc, ngps desc
-      limit 25
+      limit 1
     """, dbconn, params={'start_time': start_time, 'end_time': end_time})
 print('pulled {} shapes'.format(len(shapes_to_get)))
 #print(shapes_to_get.head())
