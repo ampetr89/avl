@@ -71,7 +71,12 @@ create table public.bus_position_match(
 	shape_id varchar(100),
 	edge_seq_num int,
     edge_geom geometry(linestring, 4326),
-    dist_rank int
+    dist_rank int,
 
+    /* derived columns */
+    interp int,
+    route_id int, 
+    trip_dist_pct decimal,
+    headway decimal
 )
 ;

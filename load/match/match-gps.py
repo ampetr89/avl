@@ -17,7 +17,7 @@ start_time, end_time = '2017-11-30 06:00:00', '2017-11-30 11:00:00'
 
 
 #%%
-def setup(shape_id, start_time, end_time):
+def setup_time(start_time, end_time):
   cur.execute('''
     drop table if exists etl.bus_position__time
     ''')
@@ -35,14 +35,19 @@ def setup(shape_id, start_time, end_time):
   pg.commit()
 
 
-def get_shapes(start_time, end_time):
+def get_shapes():
   shapes = pd.read_sql('''
-    select a.shape_id, count(*) as ntrips from 
+    select a.shape_id,
+      ST_length(c.the_geom::geography)/1000 as shape_length, -- length in km
+      count(*) as ntrips -- number of trips that use this shape
+    from 
       (select shape_id, a.scheduled_trip_id
+       /* look up the shape_id of the trips in the api data, 
+       and grab the shapes that we havent matched yet*/
        from 
           (select scheduled_trip_id
-          from bus_position__time
-          group by 1) as a
+           from etl.bus_position__time
+           group by 1) as a
           join gtfs.trips as b
            on a.scheduled_trip_id = b.scheduled_trip_id
           ) as a
@@ -50,28 +55,30 @@ def get_shapes(start_time, end_time):
        select shape_id
           from gtfs.matched_shape
           group by 1
-      ) as b
+        ) as b
        on a.shape_id = b.shape_id
+      join gtfs.shape_line as c
+       on a.shape_id = c.shape_id
        where b.shape_id is not null
-       group by 1
-       order by 2 desc
+       group by 1,2
+       order by 3 desc
        limit 1
-    ''', dbconn, params={'start_time': start_time, 'end_time': end_time})
+    ''', dbconn) # params={'start_time': start_time, 'end_time': end_time}
 
-  return shapes['shape_id']
+  return shapes[['shape_id', 'shape_length']]
 
-def setup_match_way(shape_id)
+def setup_shape(shape_id):
   cur.execute('''
-    drop table if exists gtfs.matched_ways_temp
+    drop table if exists etl.matched_ways__shape
     ''')
   cur.execute('''
-    create table gtfs.matched_ways_temp
+    create table etl.matched_ways__shape
      as select * from gtfs.matched_ways
      where shape_id = %(shape_id)s
     ''', {'shape_id': shape_id})
 
   cur.execute('''
-    create index gdx_matched_ways_temp on gtfs.matched_ways_temp using gist(the_geom)
+    create index gdx_matched_ways__shape on etl.matched_ways__shape using gist(the_geom)
     ''')  
 
   pg.commit()
@@ -81,9 +88,29 @@ def get_routes(shape_id):
     select route_id
     from gtfs.trips
     where shape_id = %(shape_id)s
+    group by 1
     ''', dbconn, params={'shape_id': shape_id})
 
   return routes['route_id']
+
+
+def setup_route(route_id):
+  cur.execute('''
+    drop table if exists etl.bus_position_match__route
+    ''')
+  cur.execute('''
+    create table etl.bus_position_match__route
+     as select *
+     from bus_position_match
+     limit 0
+    ''', {'shape_id': shape_id})
+
+  cur.execute('''
+    create index gdx_bus_position_match__route 
+      on etl.bus_position_match__route (route_id, trip_dist_pct)
+    ''')
+
+  pg.commit()
 
 def get_trips(route_id, start_time, end_time):
   """
@@ -95,7 +122,7 @@ def get_trips(route_id, start_time, end_time):
     from gtfs.trips
      where route_id = %(route_id)s
       and scheduled_trip_id in (
-          select scheduled_trip_id from bus_position_temp 
+          select scheduled_trip_id from etl.bus_position__time
           group by 1)
       and scheduled_trip_id not in (
           select scheduled_trip_id from bus_position_match 
@@ -107,85 +134,84 @@ def get_trips(route_id, start_time, end_time):
 
   return trips_to_match['scheduled_trip_id']
 
-def match_gps(scheduled_trip_id):
+def match_gps(scheduled_trip_id, route_id, shape_length):
   cur.execute('''
-  drop table if exists bus_position_temp_trip
+  drop table if exists etl.bus_position__trip
   ''')
 
   cur.execute('''
-  create table bus_position_temp_trip -- contains just this particular trip
+  create table etl.bus_position__trip -- contains just this particular trip
   as 
   select * 
-   from bus_position_temp -- contains just the trips with this shape
+   from etl.bus_position__time
    where scheduled_trip_id = %(scheduled_trip_id)s
   ''', {'scheduled_trip_id': scheduled_trip_id}
     )
 
   cur.execute('''
-  create index gidx_bus_position_temp on bus_position_temp_trip using gist (the_geom) 
+  create index gidx_bus_position__trip on etl.bus_position__trip using gist (the_geom) 
     ''')
   pg.commit()
 
+  assert False, "stopping here"
   cur.execute('''
-    drop table if exists bus_position_match_temp;
-    ''')
-  cur.execute('''
-  /* insert into bus_position_match(datetime, scheduled_trip_id, route_short_name, direction_text,
-                                trip_headsign, gps_lon, gps_lat, deviation ,vehicle_id,
-                                 way_id, begin_heading, end_heading, weighted_grade, speed_limit, road_class, length,
-                                shape_id, edge_seq_num, /*edge_geom,*/ dist_rank) */
-  create table bus_position_match_temp AS
+   insert into etl.bus_position_match__route
+     select *,
+        0::int as interp, 
+        %(route_id)d as route_id, 
+        sum(length) over (partition by scheduled_trip_id, vehicle_id)/%(shape_length)d,
+        NULL::decimal as headway -- updated later
+      from 
+      (select a.*,
+       row_number() over
+         (partition by scheduled_trip_id, vehicle_id, datetime order by dist_meters asc) as dist_rank
+      
+        from 
+         (select t.*, 
+            s.way_id, s.begin_heading, s.end_heading, s.weighted_grade, 
+            s.speed as speed_limit, s.road_class, s.length,
+            s.shape_id, s.edge_seq_num, 
+            ceiling(ST_distance(t.the_geom::geography, s.the_geom::geography)) as dist_meters
 
-   select *, 0::int as interp from 
-  (select datetime, scheduled_trip_id, 
-    route_short_name, direction_text, trip_headsign,
-    lon as gps_lon, lat as gps_lat, deviation, vehicle_id, 
-    way_id, begin_heading, end_heading, weighted_grade, speed_limit, road_class, length,
-    shape_id, edge_seq_num,
-
-    /* edge_geom as the_geom, -- writing geometry can slow things down */
-    row_number() over (partition by scheduled_trip_id, vehicle_id, datetime order by dist_meters asc) as dist_rank
-    
-    from 
-     (select a.*, 
-        c.way_id, c.begin_heading, c.end_heading, c.weighted_grade, c.speed as speed_limit, c.road_class, c.length,
-        c.shape_id, c.edge_seq_num, 
-        ceiling(ST_distance(a.the_geom::geography, c.the_geom::geography)) as dist_meters
-
-      from bus_position_temp_trip as a  
-      join geog_conversion as g
-       on 1=1
-      left join gtfs.matched_ways_temp as c
-       on ST_Dwithin(a.the_geom, c.the_geom, 50*g.mrad)
-      ) as a
-  ) as b
-  where dist_rank = 1
-  ''')
+          from etl.bus_position__trip as t
+          join geog_conversion as g
+           on 1=1
+          left join etl.matched_ways__shape as s
+           on ST_Dwithin(t.the_geom, s.the_geom, 50*g.mrad)
+          ) as a
+      ) as b
+      where dist_rank = 1
+  ''', {'route_id': route_id, 'shape_length': shape_length})
   pg.commit()
 
 
 
-setup(start_time, end_time)
+setup_time(start_time, end_time)
 
-shapes= get_shapes(start_time, end_time)
+shapes = get_shapes()
 nshapes = len(shapes)
 print('found {} shapes to match'.format(nshapes))
-print(shapes)
-trips_to_match = get_trips(shapes[0], start_time, end_time)
-print(trips_to_match)
 
-for i, shape_id in enumerate(shapes):
+for i, row in shapes.iterrows():
   print("{} / {} shapes".format(i+1, nshapes))
-  setup_match_way(shape_id)
-  break
+  shape_id = row['shape_id']
+  shape_length = row['shape_length']
+  print(shape_id, shape_length)
+  setup_shape(shape_id)
+  
   routes = get_routes(shape_id)
   nroutes = len(routes)
 
   for j, route_id in enumerate(routes):
     print(" {} / {} routes".format(j+1, nroutes))
+    setup_route(route_id)
     trips_to_match = get_trips(route_id, start_time, end_time)
+    print(trips_to_match[0])
     ntrips = len(trips_to_match)
-  
+
     for k, trip_id in enumerate(trips_to_match):
       print(" {} / {} trips".format(k+1, ntrips))
-      match_gps(trip_id)
+      match_gps(trip_id, route_id, shape_length)
+
+  # calculate headways
+  insert_route()
