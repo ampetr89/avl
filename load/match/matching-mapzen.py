@@ -61,10 +61,7 @@ shapes_to_get = pd.read_sql("""
       limit 1
     """, dbconn, params={'start_time': start_time, 'end_time': end_time})
 print('pulled {} shapes'.format(len(shapes_to_get)))
-#print(shapes_to_get.head())
 
-
-# from_local = False 
 
 def pg_to_sql(df, table, schema="gtfs"):
     # https://wiki.postgresql.org/wiki/Psycopg2_Tutorial
@@ -161,7 +158,6 @@ for i, record in shapes_to_get.iterrows():
     matched_shape = pd.DataFrame(matched_shape)
     matched_shape['shape_id'] = shape_id
     matched_shape['shape_seq_num'] = range(0, len(matched_shape)) ## this one has to start at 0 so that it matches the mapzen "begin/end_shape_index"
-    
     
 
     if 'matched_points' in response:

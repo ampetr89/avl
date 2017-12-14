@@ -11,6 +11,7 @@ load/match/results/*
 *.zip
 *.csv
 *.json
+*test.sql
 extract-bus-roads.py
 
 # compiled output
