@@ -167,12 +167,20 @@ while dt.now() < finish_time and n < 50000:
 
     bulk_insert(new, table='bus_position', schema='etl')
 
-    cur.execute('update etl.bus_position set the_geom = ST_setsrid(ST_makepoint(lon, lat), 4326)')
-    pg.commit()
-    
     cur.execute('''insert into public.bus_position
-                select *
-                from etl.bus_position ''')
+        (datetime, deviation, direction_num, direction_text,
+         lat, lon, route_short_name, trip_end_time, trip_headsign,
+         scheduled_trip_id, trip_start_time, vehicle_id,
+         the_geom
+        )
+        select 
+         datetime, deviation, direction_num, direction_text,
+         lat, lon, route_short_name, trip_end_time, trip_headsign,
+         a.scheduled_trip_id, a.trip_start_time, a.vehicle_id,
+         ST_setsrid(ST_makepoint(lon, lat), 4326) as the_geom
+
+        from etl.bus_position 
+        ''')
     pg.commit()
 
     it_end = dt.now()
