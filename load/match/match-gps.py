@@ -105,33 +105,25 @@ def setup_route(route_id):
 
   pg.commit()
 
-def get_trips(route_id, start_time, end_time):
+def get_runs(route_id):
   """
   get the trips for the particular shape, only the ones that occured
   during the interval we care about and who have not already been matched
   """
 
-  trips_to_match = pd.read_sql('''
-   select scheduled_trip_id
-    from gtfs.trips
-     where route_id = %(route_id)s
-      and scheduled_trip_id in (
-          select scheduled_trip_id from etl.bus_position__time
-          group by 1)
-      and scheduled_trip_id not in (
-          select scheduled_trip_id from bus_position_match 
-          where run_id in (select run_id from etl.bus_position__time)
-          /*datetime between %(start_time)s and %(end_time)s */
-          group by 1
-         )
-      group by 1
+  runs_to_match = pd.read_sql('''
+   select run_id
+   from etl.bus_position__time
+   where scheduled_trip_id in (select scheduled_trip_id from gtfs.trips where route_id = %(route_id)s)
+    and run_id not in (select run_id from bus_position_match group by 1)
+   group by 1
     ''', 
     dbconn, 
-    params={'route_id': route_id, 'start_time': start_time, 'end_time': end_time})
+    params={'route_id': route_id})
 
-  return trips_to_match['scheduled_trip_id']
+  return runs_to_match['run_id']
 
-def match_gps(scheduled_trip_id):
+def match_gps(run_id):
   cur.execute('''
   drop table if exists etl.bus_position__run
   ''')
@@ -141,34 +133,39 @@ def match_gps(scheduled_trip_id):
   as 
   select * 
    from etl.bus_position__time
-   where run_id = %(scheduled_trip_id)s
-  ''', {'scheduled_trip_id': scheduled_trip_id}
+   where run_id = %(run_id)s
+  ''', {'run_id': run_id}
     )
 
   cur.execute('''
-  create index gidx_bus_position__trip on etl.bus_position__trip using gist (the_geom) 
+  create index gidx_bus_position__run on etl.bus_position__run using gist (the_geom) 
     ''')
   pg.commit()
 
+
+  cur.execute('''
+  drop table if exists etl.bus_position_match__run
+  ''')
+
   #print(route_id, shape_length)
   cur.execute('''
-    create table etl.bus_position_match__trip
+    create table etl.bus_position_match__run
     AS
     select *
       from 
       (select a.*,
        row_number() over
-         (partition by run_id, datetime order by dist_meters asc) as dist_rank
+         (partition by run_id, datetime order by dist_meters asc) as dist_rank,
+         0::int as interp
        
         from 
          (select t.run_id, t.datetime, t.deviation, 
             s.way_id, s.begin_heading, s.end_heading, s.weighted_grade, 
-            s.speed as speed_limit, s.road_class, s.length,
+            s.speed, s.road_class, s.length,
             s.shape_id, s.edge_seq_num, 
-            case when t.run_id is null then 1 else 0 end as interp,
             ceiling(ST_distance(t.the_geom::geography, s.the_geom::geography)) as dist_meters
 
-          from etl.bus_position__trip as t
+          from etl.bus_position__run as t
           join geog_conversion as g
            on 1=1
           left join etl.matched_ways__shape as s
@@ -178,30 +175,64 @@ def match_gps(scheduled_trip_id):
       where dist_rank = 1
 
     ''')
+  pg.commit()
+
+  """
+  cur.execute('''
+    insert into etl.bus_position_match__route(run_id, datetime, deviation,
+    way_id, begin_heading, end_heading, weighted_grade,
+    speed, road_class, length, 
+    shape_id, edge_seq_num,
+    dist_meters, interp)
+
+    select run_id, datetime, deviation,
+      way_id, begin_heading, end_heading, weighted_grade,
+      speed, road_class, length,
+      shape_id, edge_seq_num,
+      dist_meters, 0::int as interp
+    from etl.bus_position_match__run
+    ''')
+  """
 
   cur.execute('''
-    insert into etl.bus_position_match__trip(run_id, datetime, deviation,
-    way_id, begin_heading, end_heading, weighted_grade,
-    speed_limit, road_class, length)
-    ''')
-  cur.execute('''
-   insert into etl.bus_position_match__route(
+   insert into etl.bus_position_match__run(
     run_id, datetime, deviation, 
     way_id , begin_heading, end_heading, weighted_grade, speed, road_class, length,
-    shape_id, edge_seq_num,
-    interp,
-    dist_meters,
-    dist_rank
+    shape_id, edge_seq_num,    
+    dist_meters, interp
     )
 
-    select *
-      from etl.match_ways__shape as a
-      left join 
-        (select *, lead(edge_seq_num) over (order by datetime)
-         from etl.bus_position_match__trip 
+    select 
+      run_id, datetime, deviation, 
+      a.way_id , a.begin_heading, a.end_heading, a.weighted_grade, a.speed, a.road_class, a.length,
+      a.shape_id, a.edge_seq_num, 
+      NULL::float as dist_meters, 1::int as interp
+
+      from etl.matched_ways__shape as a
+      join 
+        (select *, lead(edge_seq_num) over (order by datetime) as next_edge_seq_num
+         from etl.bus_position_match__run
         )as b
-       on a.
+       on a.edge_seq_num > b.edge_seq_num
+       and a.edge_seq_num < b.next_edge_seq_num
   ''')
+
+  assert False, 'stopping'
+  cur.execute('''
+    insert into etl.bus_position_match__route(run_id, datetime, deviation,
+    way_id, begin_heading, end_heading, weighted_grade,
+    speed, road_class, length, 
+    shape_id, edge_seq_num,
+    dist_meters, interp)
+
+    select run_id, datetime, deviation,
+      way_id, begin_heading, end_heading, weighted_grade,
+      speed, road_class, length,
+      shape_id, edge_seq_num,
+      dist_meters,  interp
+    from etl.bus_position_match__run
+    ''')
+  
   pg.commit()
 
 
@@ -243,16 +274,17 @@ for i, row in shapes.iterrows():
 
   for j, route_id in enumerate(routes):
     print(" {} / {} routes".format(j+1, nroutes))
-    setup_route(route_id)
-    trips_to_match = get_trips(route_id, start_time, end_time)
-    #print(trips_to_match[0])
     print('route_id', route_id)
-    ntrips = len(trips_to_match)
+    setup_route(route_id)
+    runs_to_match = get_runs(route_id)
+    #print(trips_to_match[0])
+    
+    nruns = len(runs_to_match)
 
-    for k, trip_id in enumerate(trips_to_match):
-      print(" {} / {} trips".format(k+1, ntrips))
-      print('trip_id', trip_id)
-      match_gps(trip_id)
+    for k, run_id in enumerate(runs_to_match):
+      print(" {} / {} runs".format(k+1, nruns))
+      print('run_id', run_id)
+      match_gps(run_id)
 
   # calculate headways
   

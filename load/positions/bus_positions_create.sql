@@ -99,7 +99,8 @@ create table etl.bus_position_match__route(
     edge_seq_num int,
     /*edge_geom geometry(linestring, 4326),*/
     dist_meters decimal,
-    dist_rank int 
+    dist_rank int ,
+    interp int
 );
 /*create index gdx_bus_position_match__route 
       on etl.bus_position_match__route (route_id, trip_dist_pct)*/
