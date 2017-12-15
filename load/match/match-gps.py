@@ -39,15 +39,18 @@ def setup_time(start_time, end_time):
   pg.commit()
 
 
+
 def get_shapes():
+  """
+  look up the shape_id of the trips in the api data, 
+   and grab the shapes that we havent matched yet
+  """
   shapes = pd.read_sql('''
     select a.shape_id,
       ST_length(c.the_geom::geography)/1000 as shape_length, -- length in km
       count(*) as ntrips -- number of trips that use this shape
     from 
       (select shape_id, a.scheduled_trip_id
-       /* look up the shape_id of the trips in the api data, 
-       and grab the shapes that we havent matched yet*/
        from 
           (select scheduled_trip_id
            from etl.bus_position__time
@@ -66,8 +69,7 @@ def get_shapes():
        where b.shape_id is not null
        group by 1,2
        order by 3 desc
-       limit 1
-    ''', dbconn) # params={'start_time': start_time, 'end_time': end_time}
+    ''', dbconn) 
 
   return shapes[['shape_id', 'shape_length']]
 
@@ -110,7 +112,6 @@ def get_runs(route_id):
   get the trips for the particular shape, only the ones that occured
   during the interval we care about and who have not already been matched
   """
-
   runs_to_match = pd.read_sql('''
    select run_id
    from etl.bus_position__time
@@ -175,24 +176,7 @@ def match_gps(run_id):
       where dist_rank = 1
 
     ''')
-  pg.commit()
 
-  """
-  cur.execute('''
-    insert into etl.bus_position_match__route(run_id, datetime, deviation,
-    way_id, begin_heading, end_heading, weighted_grade,
-    speed, road_class, length, 
-    shape_id, edge_seq_num,
-    dist_meters, interp)
-
-    select run_id, datetime, deviation,
-      way_id, begin_heading, end_heading, weighted_grade,
-      speed, road_class, length,
-      shape_id, edge_seq_num,
-      dist_meters, 0::int as interp
-    from etl.bus_position_match__run
-    ''')
-  """
 
   cur.execute('''
    insert into etl.bus_position_match__run(
@@ -217,13 +201,12 @@ def match_gps(run_id):
        and a.edge_seq_num < b.next_edge_seq_num
   ''')
 
-  assert False, 'stopping'
   cur.execute('''
     insert into etl.bus_position_match__route(run_id, datetime, deviation,
-    way_id, begin_heading, end_heading, weighted_grade,
-    speed, road_class, length, 
-    shape_id, edge_seq_num,
-    dist_meters, interp)
+     way_id, begin_heading, end_heading, weighted_grade,
+     speed, road_class, length, 
+     shape_id, edge_seq_num,
+     dist_meters, interp)
 
     select run_id, datetime, deviation,
       way_id, begin_heading, end_heading, weighted_grade,
@@ -267,6 +250,7 @@ for i, row in shapes.iterrows():
   shape_id = row['shape_id']
   shape_length = row['shape_length']
   print('shape', shape_id, shape_length)
+
   setup_shape(shape_id)
   
   routes = get_routes(shape_id)
@@ -280,13 +264,14 @@ for i, row in shapes.iterrows():
     #print(trips_to_match[0])
     
     nruns = len(runs_to_match)
+    print('  {} runs'.format(nruns))
 
     for k, run_id in enumerate(runs_to_match):
-      print(" {} / {} runs".format(k+1, nruns))
-      print('run_id', run_id)
+      #print(" {} / {} runs".format(k+1, nruns))
+      #print('run_id', run_id)
       match_gps(run_id)
 
-  # calculate headways
   
+  # calculate headways...
   insert_route(route_id, shape_length)
-  assert False, "stopping here"
+  
