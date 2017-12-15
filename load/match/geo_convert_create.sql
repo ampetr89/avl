@@ -1,3 +1,9 @@
+'''
+make a conversion table betwen lat/lon coordinates and meters
+(so you can use ST_Dwithin without having to convert to geography)
+This conversion table will only be valid in the DC area. You would
+need to make a separate table for other places
+'''
 drop table if exists geog_conversion
 ;
 create table geog_conversion as
@@ -7,7 +13,7 @@ create table geog_conversion as
             ST_LENGTH(ST_makeline(ST_translate(o, 0, 1), o)::geography) as m2lat
      
      from
-    (select ST_SETSRID(ST_makepoint(-77.0436967, 38.8996135), 4326) as o) as a 
+    (select ST_SETSRID(ST_makepoint(-77.0436967, 38.8996135), 4326) as o) as a -- conversion will only be correct near here
 ) as b
 /* confirmed here https://msi.nga.mil/MSISiteContent/StaticFiles/Calculators/degree.html*/
 ;

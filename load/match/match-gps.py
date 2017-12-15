@@ -5,6 +5,9 @@ import sys
 sys.path.append('../')
 from db import Db
 
+'''
+connect to the database
+'''
 db = Db()
 dbconn = db.conn
 pg = db.pg
@@ -12,12 +15,18 @@ cur = pg.cursor()
 
 
 #%%
-
+'''
+match the API data for a certain time period
+'''
 start_time, end_time = '2017-11-30 06:00:00', '2017-11-30 11:00:00'
 
 
 #%%
 def setup_time(start_time, end_time):
+  '''
+  we are going to be hitting the bus_position table a lot, so lets make a
+  table with just the time range we need 
+  '''
   cur.execute('''
     drop table if exists etl.bus_position__time
     ''')
@@ -41,10 +50,10 @@ def setup_time(start_time, end_time):
 
 
 def get_shapes():
-  """
+  '''
   look up the shape_id of the trips in the api data, 
    and grab the shapes that we havent matched yet
-  """
+  '''
   shapes = pd.read_sql('''
     select a.shape_id,
       ST_length(c.the_geom::geography)/1000 as shape_length, -- length in km
@@ -74,6 +83,10 @@ def get_shapes():
   return shapes[['shape_id', 'shape_length']]
 
 def setup_shape(shape_id):
+  '''
+  we are going to be hitting the gtfs.matched_ways a lot, so lets make a
+  table with just the shape we need 
+  '''
   cur.execute('''
     drop table if exists etl.matched_ways__shape
     ''')
@@ -89,7 +102,11 @@ def setup_shape(shape_id):
 
   pg.commit()
 
+
 def get_routes(shape_id):
+  '''
+  grab all the routes that use this shape
+  '''
   routes = pd.read_sql('''
     select route_id
     from gtfs.trips
@@ -101,6 +118,13 @@ def get_routes(shape_id):
 
 
 def setup_route(route_id):
+  '''
+  we'll process all the trips for a particular route, and once we
+  have them we'll move them in batch to the final table. The
+  reason is to eventually include a calculation of headway (seconds
+  or distance between vehicles on the same route), and this would
+  be an easy place to put that calculation.
+  '''
   cur.execute('''
     truncate table etl.bus_position_match__route
     ''')
@@ -108,10 +132,10 @@ def setup_route(route_id):
   pg.commit()
 
 def get_runs(route_id):
-  """
-  get the trips for the particular shape, only the ones that occured
+  '''
+  get the runs for the particular shape, only the ones that occured
   during the interval we care about and who have not already been matched
-  """
+  '''
   runs_to_match = pd.read_sql('''
    select run_id
    from etl.bus_position__time
@@ -125,6 +149,12 @@ def get_runs(route_id):
   return runs_to_match['run_id']
 
 def match_gps(run_id):
+  '''
+  match a run! look at the matched_ways__shape which has already 
+  determined which OSM ways are used for this route. all that
+  is needed is to find the closest way from that subset
+  for each gps point
+  '''
   cur.execute('''
   drop table if exists etl.bus_position__run
   ''')
@@ -148,7 +178,10 @@ def match_gps(run_id):
   drop table if exists etl.bus_position_match__run
   ''')
 
-  #print(route_id, shape_length)
+  '''
+  assemble the matched run in two steps.
+  1. match each gps point to the closest edge segment
+  '''
   cur.execute('''
     create table etl.bus_position_match__run
     AS
@@ -178,6 +211,10 @@ def match_gps(run_id):
     ''')
 
 
+  '''
+  2. make the matching contiguous: if there are any gaps, fill
+  them in bus flag as interpolated
+  '''
   cur.execute('''
    insert into etl.bus_position_match__run(
     run_id, datetime, deviation, 
@@ -201,6 +238,9 @@ def match_gps(run_id):
        and a.edge_seq_num < b.next_edge_seq_num
   ''')
 
+  '''
+  finally, move the run into the route table
+  '''
   cur.execute('''
     insert into etl.bus_position_match__route(run_id, datetime, deviation,
      way_id, begin_heading, end_heading, weighted_grade,
@@ -220,6 +260,10 @@ def match_gps(run_id):
 
 
 def insert_route(route_id, shape_length):
+  '''
+  after all runs for this route are matched, 
+  move them in bulk to the main table
+  '''
   cur.execute('''
     insert into bus_position_match
     (run_id, datetime, deviation, 
@@ -271,7 +315,7 @@ for i, row in shapes.iterrows():
       #print('run_id', run_id)
       match_gps(run_id)
 
-  
+
   # calculate headways...
   insert_route(route_id, shape_length)
   
