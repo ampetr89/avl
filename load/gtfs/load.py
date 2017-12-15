@@ -1,5 +1,9 @@
 import os
 import pandas as pd 
+
+import sys
+sys.path.append('../')
+
 from db import Db
 
 tables = [fname[:-4] for fname in os.listdir('wmata')]

@@ -1,9 +1,13 @@
 import requests
 import json
 import pandas as pd
-from db import Db
+
 import os
 import polyline
+
+import sys
+sys.path.append('../')
+from db import Db
 
 dbconn = Db().conn
 
