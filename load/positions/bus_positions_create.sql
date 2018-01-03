@@ -80,6 +80,10 @@ create table public.bus_position_match(
 ;
 create index idx_bus_position_match__id on bus_position_match(run_id, datetime)
 ;
+
+create index idx_bus_position_match__edge on bus_position_match(shape_id, edge_seq_num)
+;
+
 drop table if exists etl.bus_position_match__route
 ;
 create table etl.bus_position_match__route(

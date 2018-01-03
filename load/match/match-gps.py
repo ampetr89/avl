@@ -123,7 +123,12 @@ def setup_shape(shape_id):
     ''')
   cur.execute('''
     create table etl.matched_ways__shape
-     as select * from gtfs.matched_ways
+     as select a.* , b.start_point_num, b.end_point_num
+     from gtfs.matched_ways as a 
+     left join  gtfs.matched_ways_segments as b
+      on a.way_id = b.way_id
+      and a.shape_id = b.shape_id
+      and a.edge_seq_num = b.edge_seq_num
      where shape_id = %(shape_id)s
     ''', {'shape_id': shape_id})
 
@@ -225,9 +230,10 @@ def match_gps(run_id):
        
         from 
          (select t.run_id, t.datetime, t.deviation, 
-            s.way_id, s.begin_heading, s.end_heading, s.weighted_grade, 
+            s.way_id, s.start_point_num, s.end_point_num, 
+            s.begin_heading, s.end_heading, s.weighted_grade, 
             s.speed, s.road_class, s.length,
-            s.shape_id, s.edge_seq_num, 
+            s.shape_id, s.edge_seq_num,
             ceiling(ST_distance(t.the_geom::geography, s.the_geom::geography)) as dist_meters
 
           from etl.bus_position__run as t
@@ -249,14 +255,16 @@ def match_gps(run_id):
   cur.execute('''
    insert into etl.bus_position_match__run(
     run_id, datetime, deviation, 
-    way_id , begin_heading, end_heading, weighted_grade, speed, road_class, length,
+    way_id , start_point_num, end_point_num,
+    begin_heading, end_heading, weighted_grade, speed, road_class, length,
     shape_id, edge_seq_num,    
     dist_meters, interp
     )
 
     select 
       run_id, datetime, deviation, 
-      a.way_id , a.begin_heading, a.end_heading, a.weighted_grade, a.speed, a.road_class, a.length,
+      a.way_id , a.start_point_num, a.end_point_num,
+      a.begin_heading, a.end_heading, a.weighted_grade, a.speed, a.road_class, a.length,
       a.shape_id, a.edge_seq_num, 
       NULL::float as dist_meters, 1::int as interp
 
@@ -274,17 +282,19 @@ def match_gps(run_id):
   '''
   cur.execute('''
     insert into etl.bus_position_match__route(run_id, datetime, deviation,
-     way_id, begin_heading, end_heading, weighted_grade,
+     way_id, start_point_num, end_point_num, 
+     begin_heading, end_heading, weighted_grade,
      speed, road_class, length, 
      shape_id, edge_seq_num,
      dist_meters, interp)
 
     select run_id, datetime, deviation,
-      way_id, begin_heading, end_heading, weighted_grade,
+      way_id, start_point_num, end_point_num,
+      begin_heading, end_heading, weighted_grade,
       speed, road_class, length,
       shape_id, edge_seq_num,
       dist_meters,  interp
-    from etl.bus_position_match__run
+    from etl.bus_position_match__run 
     ''')
   
   pg.commit()
@@ -298,13 +308,15 @@ def insert_route(route_id, shape_length):
   cur.execute('''
     insert into bus_position_match
     (run_id, datetime, deviation, 
-    way_id, begin_heading, end_heading, weighted_grade, speed, road_class, length,
+    way_id,  start_point_num, end_point_num,
+    begin_heading, end_heading, weighted_grade, speed, road_class, length,
     shape_id, edge_seq_num, dist_meters,
     interp, route_id, trip_dist_pct)
     
     select 
      run_id, datetime, deviation, 
-     way_id, begin_heading, end_heading, weighted_grade, speed, road_class, length,
+     way_id,  start_point_num, end_point_num,
+     begin_heading, end_heading, weighted_grade, speed, road_class, length,
      shape_id, edge_seq_num, dist_meters,
      0::int as interp, %(route_id)s, 
      (sum(length) over (partition by run_id order by datetime))/%(shape_length)s trip_dist_pct
