@@ -98,12 +98,12 @@ def call_api():
         return df 
     except Exception as e:
         raise Exception(e)
-        logging.error("Error: ".format(str(e)))
+        logging.error("Error: {}".format(str(e)))
         return pd.DataFrame([])
 
 free_limit_gb = 20
 def db_size():
-    sz= pd.read_sql('''
+    sz = pd.read_sql('''
         SELECT sum( pg_total_relation_size(oid) ) AS total_bytes
           FROM pg_class 
        ''', dbconn)

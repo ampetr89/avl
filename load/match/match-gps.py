@@ -18,7 +18,7 @@ cur = pg.cursor()
 '''
 match the API data for a certain time period
 '''
-start_time, end_time = '2017-11-30 06:00:00', '2017-11-30 11:00:00'
+start_time, end_time = '2017-12-13 00:00:00', '2017-12-13 23:59:59'
 
 
 #%%
@@ -49,11 +49,42 @@ def setup_time(start_time, end_time):
 
 
 
-def get_shapes():
+def get_shapes(start_time, end_time):
   '''
   look up the shape_id of the trips in the api data, 
    and grab the shapes that we havent matched yet
   '''
+
+  shapes = pd.read_sql('''
+    select S1.shape_id, ST_length(S2.the_geom::geography)/1000 as shape_length, n_runs
+    from
+    (
+    select shape_id, sum(n_runs) as n_runs  from 
+    (
+    select scheduled_trip_id, count(*) as  n_runs
+    from
+    (select run_id, scheduled_trip_id
+    from etl.bus_position__time
+     group by 1,2) as a
+    left join
+    ( select run_id
+     from bus_position_match
+     where datetime between %(start_time)s and %(end_time)s
+     group by 1) as b
+    on a.run_id = b.run_id
+    where b.run_id is null
+    group by 1
+    ) as R
+    join gtfs.trips as T
+     on R.scheduled_trip_id = T.scheduled_trip_id
+    group by 1
+    ) as S1
+    join gtfs.shape_line as S2
+     on S1.shape_id = S2.shape_id
+    order by n_runs desc
+   ''', dbconn, params= {'start_time': start_time, 'end_time': end_time})
+
+  """
   shapes = pd.read_sql('''
     select a.shape_id,
       ST_length(c.the_geom::geography)/1000 as shape_length, -- length in km
@@ -79,7 +110,7 @@ def get_shapes():
        group by 1,2
        order by 3 desc
     ''', dbconn) 
-
+  """
   return shapes[['shape_id', 'shape_length']]
 
 def setup_shape(shape_id):
@@ -272,11 +303,11 @@ def insert_route(route_id, shape_length):
     interp, route_id, trip_dist_pct)
     
     select 
-    run_id, datetime, deviation, 
-    way_id, begin_heading, end_heading, weighted_grade, speed, road_class, length,
-    shape_id, edge_seq_num, dist_meters,
-    0::int as interp, %(route_id)s, 
-    (sum(length) over (partition by run_id order by datetime))/%(shape_length)s trip_dist_pct
+     run_id, datetime, deviation, 
+     way_id, begin_heading, end_heading, weighted_grade, speed, road_class, length,
+     shape_id, edge_seq_num, dist_meters,
+     0::int as interp, %(route_id)s, 
+     (sum(length) over (partition by run_id order by datetime))/%(shape_length)s trip_dist_pct
 
      from etl.bus_position_match__route
     ''', {'route_id': route_id, 'shape_length': shape_length})
@@ -285,7 +316,7 @@ def insert_route(route_id, shape_length):
 
 setup_time(start_time, end_time)
 
-shapes = get_shapes()
+shapes = get_shapes(start_time, end_time)
 nshapes = len(shapes)
 print('found {} shapes to match'.format(nshapes))
 

@@ -8,11 +8,40 @@ from db import Db
 import polyline
 from io import StringIO
 import os 
+import logging
 
 db = Db()
 dbconn = db.conn
 pg = db.pg
 cur = pg.cursor()
+
+
+#%%
+wd = os.getcwd()
+logfile = os.path.join(wd, 'matching-mapzen.log')
+logging.basicConfig(format="%(asctime)s - %(message)s", filename=logfile, 
+    level=logging.DEBUG)
+
+logger = logging.getLogger('matching_mapzen')
+logger.setLevel(logging.DEBUG)
+
+# create file handler 
+fh = logging.FileHandler(logfile)
+fh.setLevel(logging.DEBUG)
+
+# create console handler 
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+
+# format the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+
+# add the handlers to the logger
+logger.addHandler(fh)
+logger.addHandler(ch)
+
 
 
 #%%
@@ -27,7 +56,7 @@ url_args = {
       "filters":{"action":"include",
           "attributes":[
               "shape",
-              "edge.names","edge.id", "edge.way_id", 
+              "edge.names","edge.id", "edge.way_id", "matched.end_node",
               "edge.weighted_grade","edge.speed", "edge.length",
               "edge.road_class", "edge.begin_heading", "edge.end_heading",
             "edge.begin_shape_index", "edge.end_shape_index", 
@@ -38,7 +67,7 @@ url_args = {
 }
 
 
-start_time, end_time = '2017-11-30 06:30:00', '2017-11-30 10:30:00'
+start_time, end_time = '2017-12-13 00:00:00', '2017-12-13 23:59:59'
 
 shapes_to_get = pd.read_sql("""
     select A.shape_id, ST_asgeojson(the_geom) as geojson, ngps, ntrips
@@ -56,16 +85,16 @@ shapes_to_get = pd.read_sql("""
          group by 1
         ) as B
        on A.shape_id = B.shape_id
-      where A.shape_id not in (select distinct shape_id from gtfs.matched_shape)
+      where A.shape_id = '3302' /*not in (select distinct shape_id from gtfs.matched_shape)*/
       order by ntrips desc, ngps desc
       limit 1
     """, dbconn, params={'start_time': start_time, 'end_time': end_time})
-print('pulled {} shapes'.format(len(shapes_to_get)))
+logging.info('pulled {} shapes'.format(len(shapes_to_get)))
 
 
 def pg_to_sql(df, table, schema="gtfs"):
     # https://wiki.postgresql.org/wiki/Psycopg2_Tutorial
-    # print('loading {} rows to {}'.format(len(df), table))
+    # logging.info('loading {} rows to {}'.format(len(df), table))
     f = StringIO(df.to_csv(sep=",", index=False, header=False))
 
     columns = ','.join(df.columns)
@@ -107,10 +136,10 @@ for i, record in shapes_to_get.iterrows():
     
     #record = shapes_to_get.iloc[i]
     shape_id = record['shape_id']
-    print('{}: {} / {}'.format(shape_id, i+1, nshapes))
+    logging.info('{}: {} / {}'.format(shape_id, i+1, nshapes))
     coords = json.loads(record['geojson'])['coordinates']
 
-    # print('{} total coordinates'.format(len(coords)))
+    # logging.info('{} total coordinates'.format(len(coords)))
     
     coord_list = [ {'lon': coord[0], 'lat': coord[1]} for coord in coords]
     
@@ -119,7 +148,7 @@ for i, record in shapes_to_get.iterrows():
     result_file_name = 'results/shape_{}.json'.format(shape_id)
     from_local = os.path.isfile(result_file_name)
     
-    if from_local:
+    if False: #from_local:
         nlocal += 1
         with open(result_file_name, 'r') as f:
             response = json.loads(f.read())
@@ -137,10 +166,10 @@ for i, record in shapes_to_get.iterrows():
         matched_points = pd.DataFrame(response['matched_points'])
         matched_points['shape_pt_sequence'] = range(0, len(matched_points))
     else:
-        print('warning: matched_points field not provided in response')    
+        logging.warning('matched_points field not provided in response')    
     
     if 'edges' not in response:
-        print('warning: edges field not provided in response. skipping this shape')
+        logging.warning('edges field not provided in response. skipping this shape')
         continue
 
     matched_ways = pd.DataFrame(response['edges'])
@@ -171,4 +200,4 @@ for i, record in shapes_to_get.iterrows():
     insert_matched_ways()
 
 
-print('Done. Used {} api calls and read {} from local file'.format(napi, nlocal))
+logging.info('Done. Used {} api calls and read {} from local file'.format(napi, nlocal))
